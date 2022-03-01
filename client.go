@@ -106,7 +106,7 @@ func genRandomKey() (string, error) {
 
 func ConnectTunnel(server, token string, localPort int) error {
 
-	fmt.Println("ConnectTunnel", server, localPort)
+	fmt.Println("Open tunnel on port", localPort)
 
 	httpClient := &http.Client{
 		// Don't follow redirects
@@ -145,6 +145,8 @@ func ConnectTunnel(server, token string, localPort int) error {
 		if err != nil {
 			return err
 		}
+
+		//printJson(sshTunnel)
 
 		ctx := context.Background()
 		BoreSshTunnel(ctx, sshTunnel, localPort)

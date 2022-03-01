@@ -70,9 +70,35 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
 
-func (s *Server) HandleDomain(domain string, conn net.Conn) error {
+func (s *Server) GetSSHPortForDomain(domain string) (int, error) {
 
-	fmt.Println("HandleDomain", domain)
+	waygates := s.db.GetWaygates()
+
+	var waygateId string
+
+	for id, wg := range waygates {
+		for _, d := range wg.Domains {
+			if d == domain {
+				waygateId = id
+				break
+			}
+		}
+	}
+
+	portMap, err := parseAuthorizedKeysFile(s.SshConfig.AuthorizedKeysPath)
+	if err != nil {
+		return 0, err
+	}
+
+	port, exists := portMap[waygateId]
+	if !exists {
+		return 0, errors.New("No tunnel for domain")
+	}
+
+	return port, nil
+}
+
+func (s *Server) HandleDomain(domain string, conn net.Conn) error {
 
 	waygates := s.db.GetWaygates()
 

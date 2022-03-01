@@ -24,9 +24,7 @@ func ProxyTcp(conn net.Conn, addr string, port int, useTls bool, certConfig *cer
 
 		tlsConn := tls.Server(conn, tlsConfig)
 
-		fmt.Println("handshake")
 		tlsConn.Handshake()
-		fmt.Println("after handshake")
 
 		if tlsConn.ConnectionState().NegotiatedProtocol == "acme-tls/1" {
 			tlsConn.Close()
@@ -42,8 +40,6 @@ func ProxyTcp(conn net.Conn, addr string, port int, useTls bool, certConfig *cer
 }
 
 func handleConnection(conn net.Conn, upstreamAddr string, port int) {
-
-	fmt.Println("handleConnection", upstreamAddr, port)
 
 	defer conn.Close()
 
@@ -76,8 +72,6 @@ func handleConnection(conn net.Conn, upstreamAddr string, port int) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-
-	fmt.Println("copy dem datas")
 
 	// Copy request to upstream
 	go func() {

@@ -24,7 +24,7 @@ func BoreSshTunnel(ctx context.Context, tunnel SSHTunnel, localPort int) error {
 		return errors.New("Failed get random port for TLS challenges")
 	}
 	certmagic.DefaultACME.DisableHTTPChallenge = true
-	certmagic.DefaultACME.CA = certmagic.LetsEncryptStagingCA
+	//certmagic.DefaultACME.CA = certmagic.LetsEncryptStagingCA
 	certConfig := certmagic.NewDefault()
 
 	signer, err := ssh.ParsePrivateKey([]byte(tunnel.ClientPrivateKey))
@@ -59,8 +59,6 @@ func BoreSshTunnel(ctx context.Context, tunnel SSHTunnel, localPort int) error {
 	}
 	defer listener.Close()
 
-	fmt.Println("Listen")
-
 	go func() {
 		for {
 			conn, err := listener.Accept()
@@ -74,8 +72,6 @@ func BoreSshTunnel(ctx context.Context, tunnel SSHTunnel, localPort int) error {
 				//continue
 			}
 
-			fmt.Println("Got a conn")
-
 			unwrapTls := true
 			go ProxyTcp(conn, "localhost", localPort, unwrapTls, certConfig)
 		}
@@ -88,6 +84,8 @@ func BoreSshTunnel(ctx context.Context, tunnel SSHTunnel, localPort int) error {
 		fmt.Println("CertMagic error at startup")
 		fmt.Println(err)
 	}
+
+	fmt.Println("Tunnel opened on port", localPort)
 
 	<-ctx.Done()
 
