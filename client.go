@@ -1,9 +1,14 @@
 package waygate
 
 import (
+	"context"
 	"crypto/rand"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
 	"sync"
 
 	"golang.org/x/oauth2"
@@ -97,4 +102,55 @@ func genRandomKey() (string, error) {
 		id += string(chars[randIndex.Int64()])
 	}
 	return id, nil
+}
+
+func ConnectTunnel(server, token string, localPort int) error {
+
+	fmt.Println("ConnectTunnel", server, localPort)
+
+	httpClient := &http.Client{
+		// Don't follow redirects
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	url := fmt.Sprintf("https://%s/waygate/open?type=ssh&talisman=%s", server, token)
+
+	res, err := httpClient.Post(url, "text/plain", nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		return errors.New(fmt.Sprintf("Status %d returned", res.StatusCode))
+	}
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	var tun Tunnel
+	err = json.Unmarshal(bodyBytes, &tun)
+	if err != nil {
+		return err
+	}
+
+	switch tun.TunnelType {
+	case "ssh":
+		var sshTunnel SSHTunnel
+		err = json.Unmarshal(bodyBytes, &sshTunnel)
+		if err != nil {
+			return err
+		}
+
+		ctx := context.Background()
+		BoreSshTunnel(ctx, sshTunnel, localPort)
+	default:
+		return errors.New("Unsupported tunnel type")
+	}
+
+	return nil
 }

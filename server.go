@@ -1,41 +1,41 @@
 package waygate
 
 import (
-        "io/ioutil"
-        "net"
-        "strconv"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
-        "io"
-        "os"
-        "encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
 )
 
 type ServerDatabase interface {
-        GetWaygateTalisman(string) (WaygateTalisman, error)
-        GetWaygateTunnel(string) (WaygateTunnel, error)
-        GetWaygates() map[string]WaygateTunnel
+	GetWaygateTalisman(string) (WaygateTalisman, error)
+	GetWaygateTunnel(string) (WaygateTunnel, error)
+	GetWaygates() map[string]WaygateTunnel
 }
 
 type Server struct {
-        SshConfig *SshConfig
-	db  ServerDatabase
-	mux *http.ServeMux
+	SshConfig *SshConfig
+	db        ServerDatabase
+	mux       *http.ServeMux
 }
 
 type SshConfig struct {
-        ServerAddress string
-        ServerPort int
-        Username string
-        AuthorizedKeysPath string
+	ServerAddress      string
+	ServerPort         int
+	Username           string
+	AuthorizedKeysPath string
 }
 
 type AuthRequest struct {
@@ -58,7 +58,7 @@ func NewServer(db ServerDatabase) *Server {
 	})
 
 	mux.HandleFunc("/open", func(w http.ResponseWriter, r *http.Request) {
-                s.open(w, r)
+		s.open(w, r)
 	})
 
 	s.mux = mux
@@ -70,107 +70,110 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
 
-func (s *Server) GetSSHPortForDomain(domain string) (int, error) {
+func (s *Server) HandleDomain(domain string, conn net.Conn) error {
 
-        fmt.Println("check it", domain)
+	fmt.Println("HandleDomain", domain)
 
-        waygates := s.db.GetWaygates()
+	waygates := s.db.GetWaygates()
 
-        var waygateId string
+	var waygateId string
 
-        for id, wg := range waygates {
-                for _, d := range wg.Domains {
-                        if d == domain {
-                                waygateId = id
-                                break
-                        }
-                }
-        }
+	for id, wg := range waygates {
+		for _, d := range wg.Domains {
+			if d == domain {
+				waygateId = id
+				break
+			}
+		}
+	}
 
-        portMap, err := parseAuthorizedKeysFile(s.SshConfig.AuthorizedKeysPath)
-        if err != nil {
-		return 0, err
-        }
+	portMap, err := parseAuthorizedKeysFile(s.SshConfig.AuthorizedKeysPath)
+	if err != nil {
+		return err
+	}
 
-        port, exists := portMap[waygateId]
-        if !exists {
-                return 0, errors.New("No tunnel for domain")
-        }
+	port, exists := portMap[waygateId]
+	if !exists {
+		return errors.New("No tunnel for domain")
+	}
 
-        return port, nil
+	go handleConnection(conn, "localhost", port)
+
+	return nil
 }
 
 func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 
-        if r.Method != "POST" {
-                w.WriteHeader(405)
-                fmt.Fprintf(w, "Invalid method")
-                return
-        }
+	if r.Method != "POST" {
+		w.WriteHeader(405)
+		fmt.Fprintf(w, "Invalid method")
+		return
+	}
 
 	talisman, err := extractToken("talisman", r)
 	if err != nil {
-                w.WriteHeader(401)
-                fmt.Fprintf(w, err.Error())
+		w.WriteHeader(401)
+		fmt.Fprintf(w, err.Error())
 		return
 	}
 
-        talismanData, err := s.db.GetWaygateTalisman(talisman)
+	talismanData, err := s.db.GetWaygateTalisman(talisman)
 	if err != nil {
-                w.WriteHeader(403)
-                fmt.Fprintf(w, err.Error())
+		w.WriteHeader(403)
+		fmt.Fprintf(w, err.Error())
 		return
 	}
 
-        waygate, err := s.db.GetWaygateTunnel(talismanData.WaygateId)
+	waygate, err := s.db.GetWaygateTunnel(talismanData.WaygateId)
 	if err != nil {
-                w.WriteHeader(500)
-                fmt.Fprintf(w, err.Error())
+		w.WriteHeader(500)
+		fmt.Fprintf(w, err.Error())
 		return
 	}
 
-        r.ParseForm()
+	r.ParseForm()
 
-        tunnelType := r.Form.Get("type")
+	tunnelType := r.Form.Get("type")
 
-        if tunnelType != "ssh" {
-                w.WriteHeader(500)
-                fmt.Fprintf(w, "No supported tunnel types")
+	if tunnelType != "ssh" {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, "No supported tunnel types")
 		return
-        }
+	}
 
-        if s.SshConfig == nil {
-                w.WriteHeader(500)
-                fmt.Fprintf(w, "No SSH config set")
+	if s.SshConfig == nil {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, "No SSH config set")
 		return
-        }
+	}
 
-        deleteFromAuthorizedKeys(s.SshConfig.AuthorizedKeysPath, talismanData.WaygateId)
+	deleteFromAuthorizedKeys(s.SshConfig.AuthorizedKeysPath, talismanData.WaygateId)
 
-        tunnelPort, err := randomOpenPort()
-        if err != nil {
-                w.WriteHeader(500)
-                fmt.Fprintf(w, err.Error())
-                return
-        }
+	tunnelPort, err := randomOpenPort()
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, err.Error())
+		return
+	}
 
-        privKey, err := addToAuthorizedKeys(talismanData.WaygateId, tunnelPort, false, s.SshConfig.AuthorizedKeysPath)
-        if err != nil {
-                w.WriteHeader(500)
-                fmt.Fprintf(w, err.Error())
-                return
-        }
+	privKey, err := addToAuthorizedKeys(talismanData.WaygateId, tunnelPort, false, s.SshConfig.AuthorizedKeysPath)
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, err.Error())
+		return
+	}
 
-        tun := SSHTunnel{
-                TunnelType: "ssh",
-                Domains: waygate.Domains,
-                ServerAddress: s.SshConfig.ServerAddress,
-                ServerPort: s.SshConfig.ServerPort,
-                Username: s.SshConfig.Username,
-                ClientPrivateKey: privKey,
-        }
+	tun := SSHTunnel{
+		TunnelType:       "ssh",
+		Domains:          waygate.Domains,
+		ServerAddress:    s.SshConfig.ServerAddress,
+		ServerPort:       s.SshConfig.ServerPort,
+		ServerTunnelPort: tunnelPort,
+		Username:         s.SshConfig.Username,
+		ClientPrivateKey: privKey,
+	}
 
-        json.NewEncoder(w).Encode(tun)
+	json.NewEncoder(w).Encode(tun)
 }
 
 func ExtractAuthRequest(r *http.Request) (*AuthRequest, error) {
@@ -239,38 +242,37 @@ func extractToken(tokenName string, r *http.Request) (string, error) {
 	return "", errors.New("No token found")
 }
 
-
 func printJson(data interface{}) {
 	d, _ := json.MarshalIndent(data, "", "  ")
 	fmt.Println(string(d))
 }
 
 func parseAuthorizedKeysFile(path string) (map[string]int, error) {
-        akBytes, err := ioutil.ReadFile(path)
+	akBytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
 	akStr := string(akBytes)
 
-        lines := strings.Split(akStr, "\n")
+	lines := strings.Split(akStr, "\n")
 
-        portMap := make(map[string]int)
+	portMap := make(map[string]int)
 
-        for _, line := range lines {
-                _, comment, _, _, _ := ssh.ParseAuthorizedKey([]byte(line))
-                if strings.HasPrefix(comment, "waygate-") {
-                        parts := strings.Split(comment, "-")
-                        port, err := strconv.Atoi(parts[2])
-                        if err != nil {
-                                return nil, err
-                        }
+	for _, line := range lines {
+		_, comment, _, _, _ := ssh.ParseAuthorizedKey([]byte(line))
+		if strings.HasPrefix(comment, "waygate-") {
+			parts := strings.Split(comment, "-")
+			port, err := strconv.Atoi(parts[2])
+			if err != nil {
+				return nil, err
+			}
 
-                        portMap[parts[1]] = port
-                }
-        }
+			portMap[parts[1]] = port
+		}
+	}
 
-        return portMap, nil
+	return portMap, nil
 }
 
 func addToAuthorizedKeys(waygateId string, port int, allowExternalTcp bool, authKeysPath string) (string, error) {
