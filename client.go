@@ -1,6 +1,7 @@
 package waygate
 
 import (
+	"net"
 	//"time"
 	//"context"
 	"crypto/rand"
@@ -105,9 +106,7 @@ func genRandomKey() (string, error) {
 	return id, nil
 }
 
-func ConnectTunnel(server, token string, localPort int) error {
-
-	fmt.Println("Open tunnel on port", localPort)
+func CreateListener(server, token string) (net.Listener, error) {
 
 	httpClient := &http.Client{
 		// Don't follow redirects
@@ -120,23 +119,23 @@ func ConnectTunnel(server, token string, localPort int) error {
 
 	res, err := httpClient.Post(url, "text/plain", nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
-		return errors.New(fmt.Sprintf("Status %d returned", res.StatusCode))
+		return nil, errors.New(fmt.Sprintf("Status %d returned", res.StatusCode))
 	}
 
 	bodyBytes, err := io.ReadAll(res.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var tun Tunnel
 	err = json.Unmarshal(bodyBytes, &tun)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	switch tun.TunnelType {
@@ -144,25 +143,19 @@ func ConnectTunnel(server, token string, localPort int) error {
 		var sshTunnel SSHTunnel
 		err = json.Unmarshal(bodyBytes, &sshTunnel)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		//printJson(sshTunnel)
-
-		//ctx := context.Background()
-		//BoreSshTunnel(ctx, sshTunnel, localPort)
 		listener, err := MakeSshListener(sshTunnel)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Println(r.URL.Path)
-		})
-		http.Serve(listener, nil)
+		return listener, err
+
 	default:
-		return errors.New("Unsupported tunnel type")
+		return nil, errors.New("Unsupported tunnel type")
 	}
 
-	return nil
+	return nil, errors.New("Unknown error")
 }

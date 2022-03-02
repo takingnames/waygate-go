@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
@@ -16,27 +17,30 @@ func main() {
 
 	server := flag.String("server", "", "Waygate server")
 	token := flag.String("token", "", "Waygate token")
-	localPort := flag.Int("local-port", 9001, "Local port")
+	//localPort := flag.Int("local-port", 9001, "Local port")
 	flag.Parse()
 
-	client := waygate.NewClient()
-	client.ProviderUri = fmt.Sprintf("%s/waygate", *server)
-
-	outOfBand := true
-	url := client.TunnelRequestLink(outOfBand)
-
-	fmt.Println(url)
-
 	if *token == "" {
+		client := waygate.NewClient()
+		client.ProviderUri = fmt.Sprintf("%s/waygate", *server)
+		outOfBand := true
+		url := client.TunnelRequestLink(outOfBand)
+		fmt.Println(url)
+
 		t := prompt("Enter the token:")
 		token = &t
 	}
 
-	err := waygate.ConnectTunnel(*server, *token, *localPort)
+	listener, err := waygate.CreateListener(*server, *token)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		os.Exit(1)
 	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println(r.URL.Path)
+	})
+	http.Serve(listener, nil)
 
 }
 
