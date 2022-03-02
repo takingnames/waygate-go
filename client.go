@@ -1,7 +1,8 @@
 package waygate
 
 import (
-	"context"
+	//"time"
+	//"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -148,8 +149,17 @@ func ConnectTunnel(server, token string, localPort int) error {
 
 		//printJson(sshTunnel)
 
-		ctx := context.Background()
-		BoreSshTunnel(ctx, sshTunnel, localPort)
+		//ctx := context.Background()
+		//BoreSshTunnel(ctx, sshTunnel, localPort)
+		listener, err := MakeSshListener(sshTunnel)
+		if err != nil {
+			return err
+		}
+
+		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Println(r.URL.Path)
+		})
+		http.Serve(listener, nil)
 	default:
 		return errors.New("Unsupported tunnel type")
 	}

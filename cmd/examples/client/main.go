@@ -15,7 +15,7 @@ func main() {
 	fmt.Println("Starting up")
 
 	server := flag.String("server", "", "Waygate server")
-	//token := flag.String("token", "", "Waygate token")
+	token := flag.String("token", "", "Waygate token")
 	localPort := flag.Int("local-port", 9001, "Local port")
 	flag.Parse()
 
@@ -27,9 +27,12 @@ func main() {
 
 	fmt.Println(url)
 
-	token := prompt("Enter the token:")
+	if *token == "" {
+		t := prompt("Enter the token:")
+		token = &t
+	}
 
-	err := waygate.ConnectTunnel(*server, token, *localPort)
+	err := waygate.ConnectTunnel(*server, *token, *localPort)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		os.Exit(1)

@@ -2,6 +2,8 @@ module github.com/takingnames/waygate-go
 
 go 1.17
 
+//replace github.com/caddyserver/certmagic => ../certmagic
+
 require (
 	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
