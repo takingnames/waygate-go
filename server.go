@@ -23,6 +23,8 @@ type ServerDatabase interface {
 	GetWaygateTalisman(string) (WaygateTalisman, error)
 	GetWaygateTunnel(string) (WaygateTunnel, error)
 	GetWaygates() map[string]WaygateTunnel
+	SetTokenCode(tok, code string) error
+	GetTokenByCode(code string) (string, error)
 }
 
 type Server struct {
@@ -45,6 +47,15 @@ type AuthRequest struct {
 	State       string
 }
 
+type PendingToken struct {
+	Token string `json:"token"`
+}
+
+type Oauth2TokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+}
+
 func NewServer(db ServerDatabase) *Server {
 
 	s := &Server{
@@ -59,6 +70,10 @@ func NewServer(db ServerDatabase) *Server {
 
 	mux.HandleFunc("/open", func(w http.ResponseWriter, r *http.Request) {
 		s.open(w, r)
+	})
+
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		s.token(w, r)
 	})
 
 	s.mux = mux
@@ -237,6 +252,36 @@ func ExtractAuthRequest(r *http.Request) (*AuthRequest, error) {
 	}
 
 	return req, nil
+}
+
+func (s *Server) token(w http.ResponseWriter, r *http.Request) {
+
+	r.ParseForm()
+
+	code := r.Form.Get("code")
+
+	token, err := s.db.GetTokenByCode(code)
+	if err != nil {
+		w.WriteHeader(500)
+		io.WriteString(w, err.Error())
+		return
+	}
+
+	resp := Oauth2TokenResponse{
+		AccessToken: token,
+		TokenType:   "bearer",
+	}
+
+	jsonStr, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		w.WriteHeader(500)
+		io.WriteString(w, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	w.Write(jsonStr)
 }
 
 // Looks for auth token in query string, then headers, then cookies

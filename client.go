@@ -2,6 +2,7 @@ package waygate
 
 import (
 	"bufio"
+	"context"
 	"net"
 	"os"
 	"strings"
@@ -16,11 +17,13 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/pkg/browser"
 	"golang.org/x/oauth2"
 )
 
 type ClientDatabase interface {
-	SetTunnelRequest(requestId string, req TunnelRequest)
+	SetState(string)
+	GetState() string
 }
 
 type Client struct {
@@ -32,12 +35,12 @@ type Client struct {
 type TunnelRequest struct {
 }
 
-type memDb struct {
+type memClientDb struct {
 	tunnelRequests map[string]TunnelRequest
 	mut            *sync.Mutex
 }
 
-func (d *memDb) SetTunnelRequest(requestId string, req TunnelRequest) {
+func (d *memClientDb) SetTunnelRequest(requestId string, req TunnelRequest) {
 	d.mut.Lock()
 	defer d.mut.Unlock()
 
@@ -47,7 +50,7 @@ func (d *memDb) SetTunnelRequest(requestId string, req TunnelRequest) {
 func NewClient() *Client {
 
 	c := &Client{
-		Database:    &memDb{make(map[string]TunnelRequest), &sync.Mutex{}},
+		Database:    NewClientJsonDatabase(),
 		ProviderUri: "takingnames.io",
 		mut:         &sync.Mutex{},
 	}
@@ -55,12 +58,10 @@ func NewClient() *Client {
 	return c
 }
 
-func (c *Client) buildOauthConfig(outOfBand bool) *oauth2.Config {
-
-	domain := "localhost:9001"
+func (c *Client) buildOauthConfig(outOfBand bool, bindAddr string) *oauth2.Config {
 
 	oauthConf := &oauth2.Config{
-		ClientID:     domain,
+		ClientID:     bindAddr,
 		ClientSecret: "fake-secret",
 		Scopes:       []string{"tunnel"},
 		Endpoint: oauth2.Endpoint{
@@ -72,23 +73,42 @@ func (c *Client) buildOauthConfig(outOfBand bool) *oauth2.Config {
 	if outOfBand {
 		oauthConf.RedirectURL = "urn:ietf:wg:oauth:2.0:oob"
 	} else {
-		oauthConf.RedirectURL = fmt.Sprintf("%s/waygate/callback", domain)
+		oauthConf.RedirectURL = fmt.Sprintf("%s/waygate/callback", bindAddr)
 	}
 
 	return oauthConf
 }
 
-func (c *Client) TunnelRequestLink(outOfBand bool) string {
+func buildOauthConfig(providerUri string, outOfBand bool, bindAddr string) *oauth2.Config {
+
+	oauthConf := &oauth2.Config{
+		ClientID:     bindAddr,
+		ClientSecret: "fake-secret",
+		Scopes:       []string{"tunnel"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  fmt.Sprintf("https://%s/waygate/authorize", providerUri),
+			TokenURL: fmt.Sprintf("https://%s/waygate/token", providerUri),
+		},
+	}
+
+	if outOfBand {
+		oauthConf.RedirectURL = "urn:ietf:wg:oauth:2.0:oob"
+	} else {
+		oauthConf.RedirectURL = fmt.Sprintf("%s/waygate/callback", bindAddr)
+	}
+
+	return oauthConf
+}
+
+func (c *Client) TunnelRequestLink(outOfBand bool, bindAddr string) string {
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
-	oauthConf := c.buildOauthConfig(outOfBand)
+	oauthConf := c.buildOauthConfig(outOfBand, bindAddr)
 
 	requestId, _ := genRandomKey()
 
-	req := TunnelRequest{}
-
-	c.Database.SetTunnelRequest(requestId, req)
+	c.Database.SetState(requestId)
 
 	oauthUrl := oauthConf.AuthCodeURL(requestId, oauth2.AccessTypeOffline)
 
@@ -99,10 +119,42 @@ func GetTokenCLI(server string) string {
 	client := NewClient()
 	client.ProviderUri = server
 	outOfBand := true
-	url := client.TunnelRequestLink(outOfBand)
+	url := client.TunnelRequestLink(outOfBand, "dummy-uri")
 	fmt.Println(url)
 
 	token := prompt("Enter the token: ")
+	return token
+}
+
+func GetTokenBrowser(server, bindAddr string) string {
+	client := NewClient()
+	client.ProviderUri = server
+	outOfBand := true
+	url := client.TunnelRequestLink(outOfBand, bindAddr)
+	fmt.Println(url)
+
+	browser.OpenURL(url)
+
+	mux := http.NewServeMux()
+
+	var token string
+
+	srv := &http.Server{
+		Addr:    bindAddr,
+		Handler: mux,
+	}
+
+	mux.HandleFunc("/waygate/callback", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("lolz", r.URL.Path)
+
+		srv.Shutdown(context.Background())
+	})
+
+	err := srv.ListenAndServe()
+	if err != nil {
+		fmt.Println(err)
+	}
+
 	return token
 }
 
@@ -118,6 +170,92 @@ func genRandomKey() (string, error) {
 		id += string(chars[randIndex.Int64()])
 	}
 	return id, nil
+}
+
+func ListenCustom(server string) (net.Listener, error) {
+
+	fmt.Println("Listen")
+
+	db := NewClientJsonDatabase()
+
+	token, err := db.GetAccessToken()
+	if err != nil {
+		outOfBand := false
+		bindAddr := "localhost:9001"
+		oauthConf := buildOauthConfig(server, outOfBand, bindAddr)
+		requestId, _ := genRandomKey()
+		db.SetState(requestId)
+		oauthUrl := oauthConf.AuthCodeURL(requestId, oauth2.AccessTypeOffline)
+
+		fmt.Println(oauthUrl)
+
+		browser.OpenURL(oauthUrl)
+
+		mux := http.NewServeMux()
+
+		srv := &http.Server{
+			Addr:    bindAddr,
+			Handler: mux,
+		}
+
+		mux.HandleFunc("/waygate/callback", func(w http.ResponseWriter, r *http.Request) {
+
+			defer func() {
+				go srv.Shutdown(context.Background())
+			}()
+
+			r.ParseForm()
+
+			code := r.Form.Get("code")
+			if code == "" {
+				w.WriteHeader(400)
+				fmt.Fprintf(w, "Missing code param")
+				return
+			}
+
+			state := r.Form.Get("state")
+			pendingState := db.GetState()
+
+			db.SetState("")
+
+			if state != pendingState {
+				w.WriteHeader(400)
+				fmt.Fprintf(w, "State does not match")
+				return
+			}
+
+			ctx := context.Background()
+			tok, err := oauthConf.Exchange(ctx, code)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+
+			token = tok.AccessToken
+			db.SetAccessToken(token)
+		})
+
+		err := srv.ListenAndServe()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	return CreateListener(server, token)
+}
+
+func GetToken(server, oauthFlow string) (string, error) {
+
+	switch oauthFlow {
+	case "browser":
+	default:
+		return "", errors.New("Invalid flow type")
+	}
+
+	return "", errors.New("Unknown error")
+}
+
+func RefreshToken(server, refreshToken string) (string, error) {
+	return "", nil
 }
 
 func CreateListener(server, token string) (net.Listener, error) {
