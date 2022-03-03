@@ -1,7 +1,10 @@
 package waygate
 
 import (
+	"bufio"
 	"net"
+	"os"
+	"strings"
 	//"time"
 	//"context"
 	"crypto/rand"
@@ -92,6 +95,17 @@ func (c *Client) TunnelRequestLink(outOfBand bool) string {
 	return oauthUrl
 }
 
+func GetTokenCLI(server string) string {
+	client := NewClient()
+	client.ProviderUri = server
+	outOfBand := true
+	url := client.TunnelRequestLink(outOfBand)
+	fmt.Println(url)
+
+	token := prompt("Enter the token: ")
+	return token
+}
+
 func genRandomKey() (string, error) {
 
 	const chars string = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -158,4 +172,11 @@ func CreateListener(server, token string) (net.Listener, error) {
 	}
 
 	return nil, errors.New("Unknown error")
+}
+
+func prompt(promptText string) string {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print(promptText)
+	text, _ := reader.ReadString('\n')
+	return strings.TrimSpace(text)
 }
