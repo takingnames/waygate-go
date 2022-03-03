@@ -22,12 +22,12 @@ func main() {
 
 	if *token == "" {
 		client := waygate.NewClient()
-		client.ProviderUri = fmt.Sprintf("%s/waygate", *server)
+		client.ProviderUri = *server
 		outOfBand := true
 		url := client.TunnelRequestLink(outOfBand)
 		fmt.Println(url)
 
-		t := prompt("Enter the token:")
+		t := prompt("Enter the token: ")
 		token = &t
 	}
 

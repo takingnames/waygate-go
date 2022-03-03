@@ -45,7 +45,7 @@ func NewClient() *Client {
 
 	c := &Client{
 		Database:    &memDb{make(map[string]TunnelRequest), &sync.Mutex{}},
-		ProviderUri: "takingnames.io/waygate",
+		ProviderUri: "takingnames.io",
 		mut:         &sync.Mutex{},
 	}
 
@@ -61,8 +61,8 @@ func (c *Client) buildOauthConfig(outOfBand bool) *oauth2.Config {
 		ClientSecret: "fake-secret",
 		Scopes:       []string{"tunnel"},
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  fmt.Sprintf("https://%s/authorize", c.ProviderUri),
-			TokenURL: fmt.Sprintf("https://%s/token", c.ProviderUri),
+			AuthURL:  fmt.Sprintf("https://%s/waygate/authorize", c.ProviderUri),
+			TokenURL: fmt.Sprintf("https://%s/waygate/token", c.ProviderUri),
 		},
 	}
 
