@@ -267,7 +267,7 @@ func CreateListener(server, token string) (net.Listener, error) {
 		},
 	}
 
-	url := fmt.Sprintf("https://%s/waygate/open?type=ssh&talisman=%s", server, token)
+	url := fmt.Sprintf("https://%s/waygate/open?type=ssh&token=%s", server, token)
 
 	res, err := httpClient.Post(url, "text/plain", nil)
 	if err != nil {

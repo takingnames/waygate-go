@@ -22,6 +22,6 @@ type WaygateTunnel struct {
 	Domains []string
 }
 
-type WaygateTalisman struct {
+type WaygateToken struct {
 	WaygateId string
 }

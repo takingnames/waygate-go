@@ -20,7 +20,7 @@ import (
 )
 
 type ServerDatabase interface {
-	GetWaygateTalisman(string) (WaygateTalisman, error)
+	GetWaygateToken(string) (WaygateToken, error)
 	GetWaygateTunnel(string) (WaygateTunnel, error)
 	GetWaygates() map[string]WaygateTunnel
 	SetTokenCode(tok, code string) error
@@ -151,21 +151,21 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	talisman, err := extractToken("talisman", r)
+	token, err := extractToken("token", r)
 	if err != nil {
 		w.WriteHeader(401)
 		fmt.Fprintf(w, err.Error())
 		return
 	}
 
-	talismanData, err := s.db.GetWaygateTalisman(talisman)
+	tokenData, err := s.db.GetWaygateToken(token)
 	if err != nil {
 		w.WriteHeader(403)
 		fmt.Fprintf(w, err.Error())
 		return
 	}
 
-	waygate, err := s.db.GetWaygateTunnel(talismanData.WaygateId)
+	waygate, err := s.db.GetWaygateTunnel(tokenData.WaygateId)
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintf(w, err.Error())
@@ -188,7 +188,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deleteFromAuthorizedKeys(s.SshConfig.AuthorizedKeysPath, talismanData.WaygateId)
+	deleteFromAuthorizedKeys(s.SshConfig.AuthorizedKeysPath, tokenData.WaygateId)
 
 	tunnelPort, err := randomOpenPort()
 	if err != nil {
@@ -197,7 +197,7 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	privKey, err := addToAuthorizedKeys(talismanData.WaygateId, tunnelPort, false, s.SshConfig.AuthorizedKeysPath)
+	privKey, err := addToAuthorizedKeys(tokenData.WaygateId, tunnelPort, false, s.SshConfig.AuthorizedKeysPath)
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintf(w, err.Error())
