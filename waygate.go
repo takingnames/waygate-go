@@ -22,6 +22,6 @@ type Waygate struct {
 	Domains []string `json:"domains"`
 }
 
-type Token struct {
+type TokenData struct {
 	WaygateId string `json:"waygate_id"`
 }

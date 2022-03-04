@@ -20,8 +20,8 @@ import (
 )
 
 type ServerDatabase interface {
-	GetWaygateToken(string) (Token, error)
-	GetWaygateTunnel(string) (Waygate, error)
+	GetTokenData(string) (TokenData, error)
+	GetWaygate(string) (Waygate, error)
 	GetWaygates() map[string]Waygate
 	SetTokenCode(tok, code string) error
 	GetTokenByCode(code string) (string, error)
@@ -158,14 +158,14 @@ func (s *Server) open(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenData, err := s.db.GetWaygateToken(token)
+	tokenData, err := s.db.GetTokenData(token)
 	if err != nil {
 		w.WriteHeader(403)
 		fmt.Fprintf(w, err.Error())
 		return
 	}
 
-	waygate, err := s.db.GetWaygateTunnel(tokenData.WaygateId)
+	waygate, err := s.db.GetWaygate(tokenData.WaygateId)
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintf(w, err.Error())
