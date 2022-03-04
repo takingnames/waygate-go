@@ -21,8 +21,8 @@ import (
 
 type ServerDatabase interface {
 	GetWaygateToken(string) (Token, error)
-	GetWaygateTunnel(string) (WaygateTunnel, error)
-	GetWaygates() map[string]WaygateTunnel
+	GetWaygateTunnel(string) (Waygate, error)
+	GetWaygates() map[string]Waygate
 	SetTokenCode(tok, code string) error
 	GetTokenByCode(code string) (string, error)
 }

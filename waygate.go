@@ -18,7 +18,7 @@ type SSHTunnel struct {
 	ClientPrivateKey string   `json:"client_private_key"`
 }
 
-type WaygateTunnel struct {
+type Waygate struct {
 	Domains []string `json:"domains"`
 }
 
