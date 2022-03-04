@@ -20,7 +20,7 @@ import (
 )
 
 type ServerDatabase interface {
-	GetWaygateToken(string) (WaygateToken, error)
+	GetWaygateToken(string) (Token, error)
 	GetWaygateTunnel(string) (WaygateTunnel, error)
 	GetWaygates() map[string]WaygateTunnel
 	SetTokenCode(tok, code string) error
