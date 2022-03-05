@@ -1,6 +1,9 @@
 package waygate
 
-import ()
+import (
+	"context"
+	"net/http"
+)
 
 type Tunnel struct {
 	TunnelType string   `json:"tunnel_type"`
@@ -24,4 +27,16 @@ type Waygate struct {
 
 type TokenData struct {
 	WaygateId string `json:"waygate_id"`
+}
+
+type HttpServer struct {
+	WaygateServerUri string
+	Handler          http.Handler
+}
+
+func (s *HttpServer) ListenAndServe() error {
+	return ListenAndServe(s.WaygateServerUri, s.Handler)
+}
+func (s *HttpServer) Shutdown(ctx context.Context) error {
+	return nil
 }
