@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-type ClientJsonDatabase struct {
+type ClientJsonStore struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	State        string `json:"state"`
@@ -16,9 +16,9 @@ type ClientJsonDatabase struct {
 	mutex        *sync.Mutex
 }
 
-func NewClientJsonDatabase() *ClientJsonDatabase {
+func NewClientJsonStore() *ClientJsonStore {
 
-	db := &ClientJsonDatabase{
+	db := &ClientJsonStore{
 		State:  "",
 		dbPath: "waygate_client_db.json",
 		mutex:  &sync.Mutex{},
@@ -36,7 +36,7 @@ func NewClientJsonDatabase() *ClientJsonDatabase {
 	return db
 }
 
-func (db *ClientJsonDatabase) GetAccessToken() (string, error) {
+func (db *ClientJsonStore) GetAccessToken() (string, error) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
@@ -46,7 +46,7 @@ func (db *ClientJsonDatabase) GetAccessToken() (string, error) {
 
 	return db.AccessToken, nil
 }
-func (db *ClientJsonDatabase) SetAccessToken(token string) {
+func (db *ClientJsonStore) SetAccessToken(token string) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
@@ -55,7 +55,7 @@ func (db *ClientJsonDatabase) SetAccessToken(token string) {
 	db.persist()
 }
 
-func (db *ClientJsonDatabase) GetRefreshToken() (string, error) {
+func (db *ClientJsonStore) GetRefreshToken() (string, error) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
@@ -66,7 +66,7 @@ func (db *ClientJsonDatabase) GetRefreshToken() (string, error) {
 	return db.RefreshToken, nil
 }
 
-func (db *ClientJsonDatabase) SetState(state string) {
+func (db *ClientJsonStore) SetState(state string) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
@@ -75,14 +75,14 @@ func (db *ClientJsonDatabase) SetState(state string) {
 	db.persist()
 }
 
-func (db *ClientJsonDatabase) GetState() string {
+func (db *ClientJsonStore) GetState() string {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
 	return db.State
 }
 
-func (db *ClientJsonDatabase) persist() {
+func (db *ClientJsonStore) persist() {
 	saveJson(db, db.dbPath)
 }
 

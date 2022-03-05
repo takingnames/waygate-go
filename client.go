@@ -21,13 +21,19 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type ClientDatabase interface {
+var ClientStoreFactory = func() ClientStore {
+	return NewClientJsonStore()
+}
+
+type ClientStore interface {
 	SetState(string)
 	GetState() string
+	GetAccessToken() (string, error)
+	SetAccessToken(token string)
 }
 
 type Client struct {
-	Database    ClientDatabase
+	Store       ClientStore
 	ProviderUri string
 	mut         *sync.Mutex
 }
@@ -50,7 +56,7 @@ func (d *memClientDb) SetTunnelRequest(requestId string, req TunnelRequest) {
 func NewClient() *Client {
 
 	c := &Client{
-		Database:    NewClientJsonDatabase(),
+		Store:       ClientStoreFactory(),
 		ProviderUri: "takingnames.io",
 		mut:         &sync.Mutex{},
 	}
@@ -108,7 +114,7 @@ func (c *Client) TunnelRequestLink(outOfBand bool, bindAddr string) string {
 
 	requestId, _ := genRandomKey()
 
-	c.Database.SetState(requestId)
+	c.Store.SetState(requestId)
 
 	oauthUrl := oauthConf.AuthCodeURL(requestId, oauth2.AccessTypeOffline)
 
@@ -184,7 +190,7 @@ func ListenAndServe(serverAddr string, handler http.Handler) error {
 
 func Listen(serverAddr string) (net.Listener, error) {
 
-	db := NewClientJsonDatabase()
+	db := ClientStoreFactory()
 
 	token, err := db.GetAccessToken()
 	if err != nil {
