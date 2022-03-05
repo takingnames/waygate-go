@@ -16,7 +16,9 @@ func main() {
 	server := flag.String("server", "", "Waygate server")
 	flag.Parse()
 
-	listener, err := waygate.ListenCustom(*server)
+	waygate.ServerAddress = *server
+
+	listener, err := waygate.Listen()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		os.Exit(1)
