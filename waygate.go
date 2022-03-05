@@ -25,7 +25,3 @@ type Waygate struct {
 type TokenData struct {
 	WaygateId string `json:"waygate_id"`
 }
-
-var (
-	ServerAddress string = "takingnames.io"
-)

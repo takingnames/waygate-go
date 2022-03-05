@@ -172,9 +172,17 @@ func genRandomKey() (string, error) {
 	return id, nil
 }
 
-func Listen() (net.Listener, error) {
+func ListenAndServe(serverAddr string, handler http.Handler) error {
 
-	fmt.Println("Listen")
+	listener, err := Listen(serverAddr)
+	if err != nil {
+		return err
+	}
+
+	return http.Serve(listener, handler)
+}
+
+func Listen(serverAddr string) (net.Listener, error) {
 
 	db := NewClientJsonDatabase()
 
@@ -182,7 +190,7 @@ func Listen() (net.Listener, error) {
 	if err != nil {
 		outOfBand := false
 		bindAddr := "localhost:9001"
-		oauthConf := buildOauthConfig(ServerAddress, outOfBand, bindAddr)
+		oauthConf := buildOauthConfig(serverAddr, outOfBand, bindAddr)
 		requestId, _ := genRandomKey()
 		db.SetState(requestId)
 		oauthUrl := oauthConf.AuthCodeURL(requestId, oauth2.AccessTypeOffline)
@@ -240,7 +248,7 @@ func Listen() (net.Listener, error) {
 		}
 	}
 
-	return CreateListener(ServerAddress, token)
+	return CreateListener(serverAddr, token)
 }
 
 func GetToken(server, oauthFlow string) (string, error) {

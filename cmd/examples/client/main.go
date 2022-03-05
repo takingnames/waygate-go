@@ -16,19 +16,15 @@ func main() {
 	server := flag.String("server", "", "Waygate server")
 	flag.Parse()
 
-	waygate.ServerAddress = *server
-
-	listener, err := waygate.Listen()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(r.URL.Path)
 	})
 
 	fmt.Println("Running")
-	http.Serve(listener, nil)
+	err := waygate.ListenAndServe(*server, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 }
