@@ -4,7 +4,7 @@
 
 <h1>Select Domain</h1>
 
-<form action="/waygate/authorized" method="POST">
+<form action="./approve" method="POST">
   <input type="hidden" name="client_id" value="{{.AuthRequest.ClientId}}" required>
   <input type="hidden" name="redirect_uri" value="{{.AuthRequest.RedirectUri}}" required>
   <input type="hidden" name="scope" value="{{.AuthRequest.Scope}}" required>

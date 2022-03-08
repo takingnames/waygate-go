@@ -8,12 +8,10 @@ import (
 	"strings"
 	//"time"
 	//"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"sync"
 
@@ -112,7 +110,7 @@ func (c *Client) TunnelRequestLink(outOfBand bool, bindAddr string) string {
 
 	oauthConf := c.buildOauthConfig(outOfBand, bindAddr)
 
-	requestId, _ := genRandomKey()
+	requestId, _ := genRandomCode()
 
 	c.Store.SetState(requestId)
 
@@ -164,20 +162,6 @@ func GetTokenBrowser(server, bindAddr string) string {
 	return token
 }
 
-func genRandomKey() (string, error) {
-
-	const chars string = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	id := ""
-	for i := 0; i < 32; i++ {
-		randIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
-		if err != nil {
-			return "", err
-		}
-		id += string(chars[randIndex.Int64()])
-	}
-	return id, nil
-}
-
 func ListenAndServe(serverAddr string, handler http.Handler) error {
 
 	listener, err := Listen(serverAddr)
@@ -197,7 +181,7 @@ func Listen(serverAddr string) (net.Listener, error) {
 		outOfBand := false
 		bindAddr := "localhost:9001"
 		oauthConf := buildOauthConfig(serverAddr, outOfBand, bindAddr)
-		requestId, _ := genRandomKey()
+		requestId, _ := genRandomCode()
 		db.SetState(requestId)
 		oauthUrl := oauthConf.AuthCodeURL(requestId, oauth2.AccessTypeOffline)
 

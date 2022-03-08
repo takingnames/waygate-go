@@ -2,6 +2,8 @@ package waygate
 
 import (
 	"context"
+	"crypto/rand"
+	"math/big"
 	"net/http"
 )
 
@@ -39,4 +41,18 @@ func (s *HttpServer) ListenAndServe() error {
 }
 func (s *HttpServer) Shutdown(ctx context.Context) error {
 	return nil
+}
+
+func genRandomCode() (string, error) {
+
+	const chars string = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	id := ""
+	for i := 0; i < 32; i++ {
+		randIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			return "", err
+		}
+		id += string(chars[randIndex.Int64()])
+	}
+	return id, nil
 }

@@ -28,6 +28,8 @@ type ServerDatabase interface {
 	GetTokenData(string) (TokenData, error)
 	GetWaygate(string) (Waygate, error)
 	GetWaygates() map[string]Waygate
+	AddWaygate(domains []string) (string, error)
+	AddWaygateToken(waygateId string) (string, error)
 	SetTokenCode(tok, code string) error
 	GetTokenByCode(code string) (string, error)
 }
@@ -83,7 +85,15 @@ func NewServer(db ServerDatabase, hostApi HostApi) *Server {
 	mux := &http.ServeMux{}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println(r.URL.Path)
+	})
+
+	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
 		s.authorize(w, r)
+	})
+
+	mux.HandleFunc("/approve", func(w http.ResponseWriter, r *http.Request) {
+		s.approve(w, r)
 	})
 
 	mux.HandleFunc("/open", func(w http.ResponseWriter, r *http.Request) {
@@ -205,6 +215,64 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		fmt.Fprintf(w, err.Error())
 		return
+	}
+}
+
+func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(405)
+		io.WriteString(w, "Invalid method")
+		return
+	}
+
+	r.ParseForm()
+
+	authReq, err := ExtractAuthRequest(r)
+	if err != nil {
+		w.WriteHeader(400)
+		io.WriteString(w, err.Error())
+		return
+	}
+
+	domain := r.Form.Get("domain")
+	host := r.Form.Get("host")
+
+	fqdn := fmt.Sprintf("%s.%s", host, domain)
+
+	fmt.Println(fqdn)
+
+	waygateId, err := s.db.AddWaygate([]string{fqdn})
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	waygateToken, err := s.db.AddWaygateToken(waygateId)
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	if authReq.RedirectUri == "urn:ietf:wg:oauth:2.0:oob" {
+		fmt.Fprintf(w, waygateToken)
+	} else {
+		code, err := genRandomCode()
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, err.Error())
+			return
+		}
+
+		err = s.db.SetTokenCode(waygateToken, code)
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, err.Error())
+			return
+		}
+		url := fmt.Sprintf("http://%s?code=%s&state=%s", authReq.RedirectUri, code, authReq.State)
+		http.Redirect(w, r, url, 303)
 	}
 }
 
