@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"embed"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"io/ioutil"
 	"net"
@@ -19,6 +21,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+//go:embed templates
+var fs embed.FS
+
 type ServerDatabase interface {
 	GetTokenData(string) (TokenData, error)
 	GetWaygate(string) (Waygate, error)
@@ -27,9 +32,15 @@ type ServerDatabase interface {
 	GetTokenByCode(code string) (string, error)
 }
 
+type HostApi interface {
+	GetDomainNames(*http.Request) ([]string, error)
+}
+
 type Server struct {
 	SshConfig *SshConfig
 	db        ServerDatabase
+	hostApi   HostApi
+	tmpl      *template.Template
 	mux       *http.ServeMux
 }
 
@@ -56,16 +67,23 @@ type Oauth2TokenResponse struct {
 	TokenType   string `json:"token_type"`
 }
 
-func NewServer(db ServerDatabase) *Server {
+func NewServer(db ServerDatabase, hostApi HostApi) *Server {
+
+	tmpl, err := template.ParseFS(fs, "templates/*.tmpl")
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 
 	s := &Server{
-		db: db,
+		db:      db,
+		hostApi: hostApi,
+		tmpl:    tmpl,
 	}
 
 	mux := &http.ServeMux{}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(r.URL.Path)
+		s.authorize(w, r)
 	})
 
 	mux.HandleFunc("/open", func(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +159,53 @@ func (s *Server) HandleDomain(domain string, conn net.Conn) error {
 	go handleConnection(conn, "localhost", port)
 
 	return nil
+}
+
+func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(405)
+		fmt.Fprintf(w, "Invalid method")
+		return
+	}
+
+	r.ParseForm()
+
+	authReq, err := ExtractAuthRequest(r)
+	if err != nil {
+		w.WriteHeader(400)
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	wildcardDomains := []string{}
+
+	domains, err := s.hostApi.GetDomainNames(r)
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	for _, domainName := range domains {
+		if strings.HasPrefix(domainName, "*.") {
+			wildcardDomains = append(wildcardDomains, domainName[2:])
+		}
+	}
+
+	data := struct {
+		Domains     []string
+		AuthRequest *AuthRequest
+	}{
+		Domains:     wildcardDomains,
+		AuthRequest: authReq,
+	}
+
+	err = s.tmpl.ExecuteTemplate(w, "authorize.tmpl", data)
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, err.Error())
+		return
+	}
 }
 
 func (s *Server) open(w http.ResponseWriter, r *http.Request) {
