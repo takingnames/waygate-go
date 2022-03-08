@@ -235,11 +235,49 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	domain := r.Form.Get("domain")
+	if domain == "" {
+		w.WriteHeader(400)
+		fmt.Fprintf(w, "Missing domain param")
+		return
+	}
+
 	host := r.Form.Get("host")
+	if host == "" {
+		w.WriteHeader(400)
+		fmt.Fprintf(w, "Missing host param")
+		return
+	}
 
 	fqdn := fmt.Sprintf("%s.%s", host, domain)
 
 	fmt.Println(fqdn)
+
+	domains, err := s.hostApi.GetDomainNames(r)
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	matched := false
+	for _, domain := range domains {
+		if domain == fqdn {
+			matched = true
+			break
+		} else if strings.HasPrefix(domain, "*.") {
+			baseDomain := domain[1:]
+			if strings.HasSuffix(fqdn, baseDomain) {
+				matched = true
+				break
+			}
+		}
+	}
+
+	if !matched {
+		w.WriteHeader(403)
+		fmt.Fprintf(w, "No permissions for domain")
+		return
+	}
 
 	waygateId, err := s.db.AddWaygate([]string{fqdn})
 	if err != nil {
