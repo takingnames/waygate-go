@@ -9,12 +9,6 @@
   <input type="hidden" name="state" value="{{.AuthRequest.State}}" required>
 
   <div>
-    Description:
-  </div>
-  <div>
-    <input type="text" name="description" placeholder="Description (optional)">
-  </div>
-  <div>
     Domain:
   </div>
   <div>
@@ -25,6 +19,13 @@
       <option>{{$domainName}}</option>
       {{ end }}
     </select>
+  </div>
+
+  <div>
+    Description:
+  </div>
+  <div>
+    <input type="text" name="description" placeholder="Description (optional)">
   </div>
 
   <div class='tn-button-row'>
