@@ -96,6 +96,10 @@ func NewServer(db ServerDatabase, hostApi HostApi) *Server {
 		s.approve(w, r)
 	})
 
+	mux.HandleFunc("/connect-existing", func(w http.ResponseWriter, r *http.Request) {
+		s.connectExisting(w, r)
+	})
+
 	mux.HandleFunc("/open", func(w http.ResponseWriter, r *http.Request) {
 		s.open(w, r)
 	})
@@ -202,11 +206,15 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	waygates := s.db.GetWaygates()
+
 	data := struct {
 		Domains     []string
+		Waygates    map[string]Waygate
 		AuthRequest *AuthRequest
 	}{
 		Domains:     wildcardDomains,
+		Waygates:    waygates,
 		AuthRequest: authReq,
 	}
 
@@ -218,7 +226,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
+func (s *Server) connectExisting(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		w.WriteHeader(405)
 		io.WriteString(w, "Invalid method")
@@ -227,12 +235,19 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 
 	r.ParseForm()
 
-	authReq, err := ExtractAuthRequest(r)
-	if err != nil {
-		w.WriteHeader(400)
-		io.WriteString(w, err.Error())
+	waygateId := r.Form.Get("waygate-id")
+
+	s.completeAuth(w, r, waygateId)
+}
+
+func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(405)
+		io.WriteString(w, "Invalid method")
 		return
 	}
+
+	r.ParseForm()
 
 	domain := r.Form.Get("domain")
 	if domain == "" {
@@ -251,8 +266,6 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 	description := r.Form.Get("description")
 
 	fqdn := fmt.Sprintf("%s.%s", host, domain)
-
-	fmt.Println(fqdn)
 
 	domains, err := s.hostApi.GetDomainNames(r)
 	if err != nil {
@@ -292,10 +305,25 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.completeAuth(w, r, waygateId)
+}
+
+func (s *Server) completeAuth(w http.ResponseWriter, r *http.Request, waygateId string) {
+
+	// TODO: Make sure this is secure, ie users can't connect to waygates
+	// owned by others.
+
 	waygateToken, err := s.db.AddWaygateToken(waygateId)
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintf(w, err.Error())
+		return
+	}
+
+	authReq, err := ExtractAuthRequest(r)
+	if err != nil {
+		w.WriteHeader(400)
+		io.WriteString(w, err.Error())
 		return
 	}
 

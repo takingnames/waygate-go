@@ -1,5 +1,8 @@
+{{ template "header.tmpl" . }}
+
 <p>
-  A service is requesting to create a tunnel. If you want to approve this action, select a domain below.
+  A service is requesting to create a tunnel. If you want to approve this
+  action, create a new Waygate or select an existing one below.
 </p>
 
 <form action="./approve" method="POST">
@@ -8,11 +11,13 @@
   <input type="hidden" name="scope" value="{{.AuthRequest.Scope}}" required>
   <input type="hidden" name="state" value="{{.AuthRequest.State}}" required>
 
+  <h2>Create a new Waygate:</h2>
+
   <div>
     Domain:
   </div>
   <div>
-    <input type="text" name="host" placeholder="Subdomain" required>
+    <input type="text" name="host" placeholder="Subdomain">
     <span>.</span>
     <select id="domain-input" name="domain">
       {{range $domainName := $.Domains}}
@@ -29,7 +34,42 @@
   </div>
 
   <div class='tn-button-row'>
-    <button class='button'>Approve</button>
-    <button class='button' formaction="/deny">Deny</button>
+    <button class='button'>Create</button>
+    <button class='button' formaction="/deny">Cancel</button>
+  </div>
+
+  <h2>Select existing Waygate:</h2>
+
+  <div class='waygate-list-table'>
+    <table class='waygate-table'>
+      <thead>
+        <tr>
+          <th class='waygate-table__cell'>Domains</th>
+          <th class='waygate-table__cell'>Description</th>
+          <th class='waygate-table__cell'></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $waygateId, $waygate := .Waygates}}
+        <tr>
+          <td class='waygate-table__cell'>
+            {{ range $domain := $waygate.Domains }}
+            <div>
+              {{$domain}}
+            </div>
+            {{ end }}
+          </td>
+          <td class='waygate-table__cell'>
+            {{$waygate.Description}}
+          </td>
+          <td class='waygate-table__cell'>
+            <button class='button' formaction="./connect-existing" name="waygate-id" value="{{$waygateId}}">Select</button>
+          </td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
   </div>
 </form>
+
+{{ template "footer.tmpl" . }}
