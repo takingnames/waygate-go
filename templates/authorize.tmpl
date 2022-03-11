@@ -5,40 +5,19 @@
   action, create a new Waygate or select an existing one below.
 </p>
 
+
+<form action="./edit" method="POST">
+  <input type="hidden" name="return-url" value="{{.ReturnUrl}}" required>
+  <button class='button' formaction="./edit">Create new Waygate</button>
+</form>
+
+<h1>Select existing Waygate:</h1>
+
 <form action="./approve" method="POST">
   <input type="hidden" name="client_id" value="{{.AuthRequest.ClientId}}" required>
   <input type="hidden" name="redirect_uri" value="{{.AuthRequest.RedirectUri}}" required>
   <input type="hidden" name="scope" value="{{.AuthRequest.Scope}}" required>
   <input type="hidden" name="state" value="{{.AuthRequest.State}}" required>
-
-  <h2>Create a new Waygate:</h2>
-
-  <div>
-    Domain:
-  </div>
-  <div>
-    <input type="text" name="host" placeholder="Subdomain">
-    <span>.</span>
-    <select id="domain-input" name="domain">
-      {{range $domainName := $.Domains}}
-      <option>{{$domainName}}</option>
-      {{ end }}
-    </select>
-  </div>
-
-  <div>
-    Description:
-  </div>
-  <div>
-    <input type="text" name="description" placeholder="Description (optional)">
-  </div>
-
-  <div class='tn-button-row'>
-    <button class='button'>Create</button>
-    <button class='button' formaction="/deny">Cancel</button>
-  </div>
-
-  <h2>Select existing Waygate:</h2>
 
   <div class='waygate-list-table'>
     <table class='waygate-table'>
