@@ -24,7 +24,9 @@ type SSHTunnel struct {
 }
 
 type Waygate struct {
-	Domains []string `json:"domains"`
+	Domains     []string `json:"domains"`
+	Description string   `json:"description"`
+	AdminUrl    string   `json:"admin_url"`
 }
 
 type TokenData struct {

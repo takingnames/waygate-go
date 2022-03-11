@@ -2,14 +2,21 @@
   A service is requesting to create a tunnel. If you want to approve this action, select a domain below.
 </p>
 
-<h1>Select Domain</h1>
-
 <form action="./approve" method="POST">
   <input type="hidden" name="client_id" value="{{.AuthRequest.ClientId}}" required>
   <input type="hidden" name="redirect_uri" value="{{.AuthRequest.RedirectUri}}" required>
   <input type="hidden" name="scope" value="{{.AuthRequest.Scope}}" required>
   <input type="hidden" name="state" value="{{.AuthRequest.State}}" required>
 
+  <div>
+    Description:
+  </div>
+  <div>
+    <input type="text" name="description" placeholder="Description (optional)">
+  </div>
+  <div>
+    Domain:
+  </div>
   <div>
     <input type="text" name="host" placeholder="Subdomain" required>
     <span>.</span>

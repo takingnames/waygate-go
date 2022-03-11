@@ -28,7 +28,7 @@ type ServerDatabase interface {
 	GetTokenData(string) (TokenData, error)
 	GetWaygate(string) (Waygate, error)
 	GetWaygates() map[string]Waygate
-	AddWaygate(domains []string) (string, error)
+	AddWaygate(waygate Waygate) (string, error)
 	AddWaygateToken(waygateId string) (string, error)
 	SetTokenCode(tok, code string) error
 	GetTokenByCode(code string) (string, error)
@@ -248,6 +248,8 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	description := r.Form.Get("description")
+
 	fqdn := fmt.Sprintf("%s.%s", host, domain)
 
 	fmt.Println(fqdn)
@@ -279,7 +281,11 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	waygateId, err := s.db.AddWaygate([]string{fqdn})
+	wg := Waygate{
+		Domains:     []string{fqdn},
+		Description: description,
+	}
+	waygateId, err := s.db.AddWaygate(wg)
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintf(w, err.Error())
