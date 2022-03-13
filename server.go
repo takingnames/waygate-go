@@ -4,12 +4,10 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"embed"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"io/ioutil"
 	"net"
@@ -20,9 +18,6 @@ import (
 
 	"golang.org/x/crypto/ssh"
 )
-
-//go:embed templates
-var fs embed.FS
 
 type ServerDatabase interface {
 	GetTokenData(string) (TokenData, error)
@@ -42,7 +37,6 @@ type Server struct {
 	SshConfig *SshConfig
 	db        ServerDatabase
 	hostApi   HostApi
-	tmpl      *template.Template
 	mux       *http.ServeMux
 }
 
@@ -71,15 +65,9 @@ type Oauth2TokenResponse struct {
 
 func NewServer(db ServerDatabase, hostApi HostApi) *Server {
 
-	tmpl, err := template.ParseFS(fs, "templates/*.tmpl")
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-
 	s := &Server{
 		db:      db,
 		hostApi: hostApi,
-		tmpl:    tmpl,
 	}
 
 	mux := &http.ServeMux{}
@@ -88,40 +76,12 @@ func NewServer(db ServerDatabase, hostApi HostApi) *Server {
 		fmt.Println(r.URL.Path)
 	})
 
-	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
-		s.authorize(w, r)
-	})
-
-	mux.HandleFunc("/approve", func(w http.ResponseWriter, r *http.Request) {
-		s.approve(w, r)
-	})
-
-	mux.HandleFunc("/connect-existing", func(w http.ResponseWriter, r *http.Request) {
-		s.connectExisting(w, r)
-	})
-
-	mux.HandleFunc("/open", func(w http.ResponseWriter, r *http.Request) {
-		s.open(w, r)
-	})
-
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
 		s.token(w, r)
 	})
 
-	mux.HandleFunc("/edit", func(w http.ResponseWriter, r *http.Request) {
-		s.edit(w, r)
-	})
-	mux.HandleFunc("/add-domain", func(w http.ResponseWriter, r *http.Request) {
-		s.addNormalDomain(w, r)
-	})
-	mux.HandleFunc("/add-wildcard-domain", func(w http.ResponseWriter, r *http.Request) {
-		s.addWildcardDomain(w, r)
-	})
-	mux.HandleFunc("/delete-selected", func(w http.ResponseWriter, r *http.Request) {
-		s.deleteSelected(w, r)
-	})
-	mux.HandleFunc("/create", func(w http.ResponseWriter, r *http.Request) {
-		s.create(w, r)
+	mux.HandleFunc("/open", func(w http.ResponseWriter, r *http.Request) {
+		s.open(w, r)
 	})
 
 	s.mux = mux
@@ -189,185 +149,6 @@ func (s *Server) HandleDomain(domain string, conn net.Conn) error {
 	go handleConnection(conn, "localhost", port)
 
 	return nil
-}
-
-func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		w.WriteHeader(405)
-		fmt.Fprintf(w, "Invalid method")
-		return
-	}
-
-	r.ParseForm()
-
-	authReq, err := ExtractAuthRequest(r)
-	if err != nil {
-		w.WriteHeader(400)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-
-	wildcardDomains := []string{}
-
-	domains, err := s.hostApi.GetDomainNames(r)
-	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-
-	for _, domainName := range domains {
-		if strings.HasPrefix(domainName, "*.") {
-			wildcardDomains = append(wildcardDomains, domainName[2:])
-		}
-	}
-
-	waygates := s.db.GetWaygates()
-
-	//returnUrl := fmt.Sprintf(".%s?%s", r.URL.Path, r.URL.RawQuery)
-	// TODO: figure out how to make this relative
-	returnUrl := "/waygate" + r.URL.String()
-
-	data := struct {
-		Domains     []string
-		Waygates    map[string]Waygate
-		AuthRequest *AuthRequest
-		ReturnUrl   string
-	}{
-		Domains:     wildcardDomains,
-		Waygates:    waygates,
-		AuthRequest: authReq,
-		ReturnUrl:   returnUrl,
-	}
-
-	err = s.tmpl.ExecuteTemplate(w, "authorize.tmpl", data)
-	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-}
-
-func (s *Server) connectExisting(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.WriteHeader(405)
-		io.WriteString(w, "Invalid method")
-		return
-	}
-
-	r.ParseForm()
-
-	waygateId := r.Form.Get("waygate-id")
-
-	s.completeAuth(w, r, waygateId)
-}
-
-func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.WriteHeader(405)
-		io.WriteString(w, "Invalid method")
-		return
-	}
-
-	r.ParseForm()
-
-	domain := r.Form.Get("domain")
-	if domain == "" {
-		w.WriteHeader(400)
-		fmt.Fprintf(w, "Missing domain param")
-		return
-	}
-
-	host := r.Form.Get("host")
-	if host == "" {
-		w.WriteHeader(400)
-		fmt.Fprintf(w, "Missing host param")
-		return
-	}
-
-	description := r.Form.Get("description")
-
-	fqdn := fmt.Sprintf("%s.%s", host, domain)
-
-	domains, err := s.hostApi.GetDomainNames(r)
-	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-
-	matched := false
-	for _, domain := range domains {
-		if domain == fqdn {
-			matched = true
-			break
-		} else if strings.HasPrefix(domain, "*.") {
-			baseDomain := domain[1:]
-			if strings.HasSuffix(fqdn, baseDomain) {
-				matched = true
-				break
-			}
-		}
-	}
-
-	if !matched {
-		w.WriteHeader(403)
-		fmt.Fprintf(w, "No permissions for domain")
-		return
-	}
-
-	wg := Waygate{
-		Domains:     []string{fqdn},
-		Description: description,
-	}
-	waygateId, err := s.db.AddWaygate(wg)
-	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-
-	s.completeAuth(w, r, waygateId)
-}
-
-func (s *Server) completeAuth(w http.ResponseWriter, r *http.Request, waygateId string) {
-
-	// TODO: Make sure this is secure, ie users can't connect to waygates
-	// owned by others.
-
-	waygateToken, err := s.db.AddWaygateToken(waygateId)
-	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-
-	authReq, err := ExtractAuthRequest(r)
-	if err != nil {
-		w.WriteHeader(400)
-		io.WriteString(w, err.Error())
-		return
-	}
-
-	if authReq.RedirectUri == "urn:ietf:wg:oauth:2.0:oob" {
-		fmt.Fprintf(w, waygateToken)
-	} else {
-		code, err := genRandomCode()
-		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, err.Error())
-			return
-		}
-
-		err = s.db.SetTokenCode(waygateToken, code)
-		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, err.Error())
-			return
-		}
-		url := fmt.Sprintf("http://%s?code=%s&state=%s", authReq.RedirectUri, code, authReq.State)
-		http.Redirect(w, r, url, 303)
-	}
 }
 
 func (s *Server) open(w http.ResponseWriter, r *http.Request) {
@@ -509,175 +290,6 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	w.Write(jsonStr)
-}
-
-func (s *Server) addNormalDomain(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	domain := r.Form.Get("add-domain")
-	s.addDomain(w, r, domain)
-}
-func (s *Server) addWildcardDomain(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
-	host := r.Form.Get("host")
-	domain := r.Form.Get("add-wildcard-domain")
-
-	if host != "" {
-		domain = fmt.Sprintf("%s.%s", host, domain)
-	}
-
-	s.addDomain(w, r, domain)
-}
-func (s *Server) addDomain(w http.ResponseWriter, r *http.Request, addDomain string) {
-	if r.Method != "POST" {
-		w.WriteHeader(405)
-		io.WriteString(w, "Invalid method")
-		return
-	}
-
-	r.ParseForm()
-
-	dup := false
-	for _, domain := range r.Form["selected-domains"] {
-		if addDomain == domain {
-			dup = true
-			break
-		}
-	}
-
-	if !dup {
-		r.Form["selected-domains"] = append(r.Form["selected-domains"], addDomain)
-	}
-
-	s.edit(w, r)
-}
-func (s *Server) deleteSelected(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.WriteHeader(405)
-		io.WriteString(w, "Invalid method")
-		return
-	}
-
-	r.ParseForm()
-
-	deleteDomain := r.Form.Get("delete-domain")
-
-	newSelected := []string{}
-
-	for _, sel := range r.Form["selected-domains"] {
-		fmt.Println(sel, deleteDomain)
-		if sel != deleteDomain {
-			newSelected = append(newSelected, sel)
-		}
-	}
-
-	r.Form["selected-domains"] = newSelected
-
-	s.edit(w, r)
-}
-func (s *Server) edit(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.WriteHeader(405)
-		io.WriteString(w, "Invalid method")
-		return
-	}
-
-	r.ParseForm()
-
-	selectedDomains := r.Form["selected-domains"]
-
-	allDomains, err := s.hostApi.GetDomainNames(r)
-	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-
-	domains := []string{}
-	wildcardDomains := []string{}
-
-	for _, domainName := range allDomains {
-		if strings.HasPrefix(domainName, "*.") {
-			wildcardDomains = append(wildcardDomains, domainName[2:])
-		} else {
-			domains = append(domains, domainName)
-		}
-	}
-
-	data := struct {
-		SelectedDomains []string
-		Domains         []string
-		WildcardDomains []string
-		ReturnUrl       string
-	}{
-		SelectedDomains: selectedDomains,
-		Domains:         domains,
-		WildcardDomains: wildcardDomains,
-		ReturnUrl:       r.Form.Get("return-url"),
-	}
-
-	err = s.tmpl.ExecuteTemplate(w, "edit.tmpl", data)
-	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-}
-func (s *Server) create(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.WriteHeader(405)
-		io.WriteString(w, "Invalid method")
-		return
-	}
-
-	r.ParseForm()
-
-	selectedDomains := r.Form["selected-domains"]
-	description := r.Form.Get("description")
-
-	domains, err := s.hostApi.GetDomainNames(r)
-	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-
-	for _, fqdn := range selectedDomains {
-		matched := false
-		for _, domain := range domains {
-			if domain == fqdn {
-				matched = true
-				break
-			} else if strings.HasPrefix(domain, "*.") {
-				baseDomain := domain[1:]
-				if strings.HasSuffix(fqdn, baseDomain) {
-					matched = true
-					break
-				}
-			}
-		}
-
-		if !matched {
-			w.WriteHeader(403)
-			fmt.Fprintf(w, "No permissions for domain")
-			return
-		}
-	}
-
-	wg := Waygate{
-		Domains:     selectedDomains,
-		Description: description,
-	}
-	_, err = s.db.AddWaygate(wg)
-	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, err.Error())
-		return
-	}
-
-	returnUrl := r.Form.Get("return-url")
-
-	fmt.Println("redir to", returnUrl)
-	http.Redirect(w, r, returnUrl, 303)
 }
 
 // Looks for auth token in query string, then headers, then cookies
