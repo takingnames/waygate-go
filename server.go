@@ -23,9 +23,6 @@ type ServerDatabase interface {
 	GetTokenData(string) (TokenData, error)
 	GetWaygate(string) (Waygate, error)
 	GetWaygates() map[string]Waygate
-	AddWaygate(waygate Waygate) (string, error)
-	AddWaygateToken(waygateId string) (string, error)
-	SetTokenCode(tok, code string) error
 	GetTokenByCode(code string) (string, error)
 }
 
