@@ -174,12 +174,23 @@ func ListenAndServe(serverAddr string, handler http.Handler) error {
 
 func Listen(serverAddr string) (net.Listener, error) {
 
+	bindAddr := "localhost:9001"
+
+	token, err := FlowToken(serverAddr, bindAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	return CreateListener(serverAddr, token)
+}
+
+func FlowToken(serverAddr, bindAddr string) (string, error) {
+
 	db := ClientStoreFactory()
 
 	token, err := db.GetAccessToken()
 	if err != nil {
 		outOfBand := false
-		bindAddr := "localhost:9001"
 		oauthConf := buildOauthConfig(serverAddr, outOfBand, bindAddr)
 		requestId, _ := genRandomCode()
 		db.SetState(requestId)
@@ -238,7 +249,7 @@ func Listen(serverAddr string) (net.Listener, error) {
 		}
 	}
 
-	return CreateListener(serverAddr, token)
+	return token, nil
 }
 
 func GetToken(server, oauthFlow string) (string, error) {
